@@ -1,6 +1,8 @@
 #include "glwidget.h"
 #include <QKeyEvent>
 #include <QDebug>
+#include <cmath>
+#include <QDateTime>
 
 // 顶点着色器源码
 static const char *vertexShaderSource =
@@ -8,29 +10,33 @@ static const char *vertexShaderSource =
     "layout (location = 0) in vec3 aPos;\n"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "   gl_Position = vec4(aPos, 1.0);\n"
     "}\n";
 
-// 片段着色器源码
+// 片段着色器源码（使用 uniform 变量）
 static const char *fragmentShaderSource =
     "#version 330 core\n"
     "out vec4 FragColor;\n"
+    "uniform vec4 ourColor;\n"
     "void main()\n"
     "{\n"
-    "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+    "   FragColor = ourColor;\n"
     "}\n";
 
 GLWidget::GLWidget(QWidget *parent)
-    : QOpenGLWidget(parent), shaderProgram(nullptr), VBO(0), VAO(0)
+    : QOpenGLWidget(parent), shaderProgram(nullptr), VBO(0), VAO(0), greenValue(0.5f)
 {
-    // 设置窗口标题和大小（可选）
-    setWindowTitle("Qt OpenGL Triangle");
+    setWindowTitle("Qt OpenGL Dynamic Color Triangle");
     resize(800, 600);
+
+    // 创建定时器，每 16ms（约 60fps）更新颜色
+    colorTimer = new QTimer(this);
+    connect(colorTimer, &QTimer::timeout, this, &GLWidget::updateColor);
+    colorTimer->start(16);  // 约 60fps
 }
 
 GLWidget::~GLWidget()
 {
-    // 在 OpenGL 上下文销毁前释放资源
     makeCurrent();
     if (VAO) glDeleteVertexArrays(1, &VAO);
     if (VBO) glDeleteBuffers(1, &VBO);
@@ -40,7 +46,7 @@ GLWidget::~GLWidget()
 
 void GLWidget::initializeGL()
 {
-    // 初始化 OpenGL 函数（通过 QOpenGLFunctions_3_3_Core）
+    // 初始化 OpenGL 函数
     initializeOpenGLFunctions();
 
     // 编译并链接着色器程序
@@ -54,9 +60,9 @@ void GLWidget::initializeGL()
 
     // 设置顶点数据
     float vertices[] = {
-        -0.5f, -0.5f, 0.0f, // 左
-         0.5f, -0.5f, 0.0f, // 右
-         0.0f,  0.5f, 0.0f  // 上
+         0.5f, -0.5f, 0.0f,  // 右下
+        -0.5f, -0.5f, 0.0f,  // 左下
+         0.0f,  0.5f, 0.0f   // 顶部
     };
 
     // 创建 VAO 和 VBO
@@ -72,34 +78,50 @@ void GLWidget::initializeGL()
     glEnableVertexAttribArray(0);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    glBindVertexArray(0);  // 解绑 VAO
 }
 
 void GLWidget::resizeGL(int w, int h)
 {
-    // 设置视口
     glViewport(0, 0, w, h);
 }
 
 void GLWidget::paintGL()
 {
-    // 清屏颜色
+    // 清屏
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // 绘制三角形
+    // 激活着色器程序
     shaderProgram->bind();
+
+    // 获取 uniform 位置并设置颜色
+    int vertexColorLocation = shaderProgram->uniformLocation("ourColor");
+    shaderProgram->setUniformValue(vertexColorLocation, 0.0f, greenValue, 0.0f, 1.0f);
+
+    // 绑定 VAO 并绘制三角形
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+
     shaderProgram->release();
+}
+
+void GLWidget::updateColor()
+{
+    // 使用正弦波动态改变绿色分量（产生呼吸灯效果）
+    static double startTime = QDateTime::currentMSecsSinceEpoch() / 1000.0;
+    double currentTime = QDateTime::currentMSecsSinceEpoch() / 1000.0;
+    greenValue = static_cast<float>(sin(currentTime) / 2.0 + 0.5);
+
+    // 触发重绘
+    update();  // 调用 update() 会触发 paintGL()
 }
 
 void GLWidget::keyPressEvent(QKeyEvent *event)
 {
-    // 按 ESC 键退出程序
     if (event->key() == Qt::Key_Escape) {
-        close();  // 关闭窗口，程序结束
+        close();
     } else {
         QOpenGLWidget::keyPressEvent(event);
     }
