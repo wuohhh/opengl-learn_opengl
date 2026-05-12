@@ -1,84 +1,156 @@
 #include "glwidget.h"
-#include <QKeyEvent>
-#include <QDebug>
-#include <cmath>
-#include <QDateTime>
 
-// 顶点着色器源码
+#include <QDebug>
+#include <QImage>
+#include <QKeyEvent>
+
 static const char *vertexShaderSource =
     "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
+    "layout (location = 1) in vec3 aColor;\n"
+    "layout (location = 2) in vec2 aTexCoord;\n"
+    "out vec3 ourColor;\n"
+    "out vec2 TexCoord;\n"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos, 1.0);\n"
+    "    gl_Position = vec4(aPos, 1.0);\n"
+    "    ourColor = aColor;\n"
+    "    TexCoord = aTexCoord;\n"
     "}\n";
 
-// 片段着色器源码（使用 uniform 变量）
 static const char *fragmentShaderSource =
     "#version 330 core\n"
     "out vec4 FragColor;\n"
-    "uniform vec4 ourColor;\n"
+    "in vec3 ourColor;\n"
+    "in vec2 TexCoord;\n"
+    "uniform sampler2D texture1;\n"
+    "uniform sampler2D texture2;\n"
     "void main()\n"
     "{\n"
-    "   FragColor = ourColor;\n"
+    "    FragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);\n"
     "}\n";
 
 GLWidget::GLWidget(QWidget *parent)
-    : QOpenGLWidget(parent), shaderProgram(nullptr), VBO(0), VAO(0), greenValue(0.5f)
+    : QOpenGLWidget(parent),
+      shaderProgram(nullptr),
+      VBO(0),
+      VAO(0),
+      EBO(0),
+      texture1(0),
+      texture2(0)
 {
-    setWindowTitle("Qt OpenGL Dynamic Color Triangle");
+    setWindowTitle("Qt OpenGL Texture Mix");
     resize(800, 600);
-
-    // 创建定时器，每 16ms（约 60fps）更新颜色
-    colorTimer = new QTimer(this);
-    connect(colorTimer, &QTimer::timeout, this, &GLWidget::updateColor);
-    colorTimer->start(16);  // 约 60fps
 }
 
 GLWidget::~GLWidget()
 {
     makeCurrent();
-    if (VAO) glDeleteVertexArrays(1, &VAO);
-    if (VBO) glDeleteBuffers(1, &VBO);
+    if (texture2) {
+        glDeleteTextures(1, &texture2);
+    }
+    if (texture1) {
+        glDeleteTextures(1, &texture1);
+    }
+    if (EBO) {
+        glDeleteBuffers(1, &EBO);
+    }
+    if (VBO) {
+        glDeleteBuffers(1, &VBO);
+    }
+    if (VAO) {
+        glDeleteVertexArrays(1, &VAO);
+    }
     delete shaderProgram;
     doneCurrent();
 }
 
 void GLWidget::initializeGL()
 {
-    // 初始化 OpenGL 函数
     initializeOpenGLFunctions();
 
-    // 编译并链接着色器程序
     shaderProgram = new QOpenGLShaderProgram(this);
-    shaderProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource);
-    shaderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource);
+    if (!shaderProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
+        qWarning() << "Vertex shader compilation failed:" << shaderProgram->log();
+        return;
+    }
+    if (!shaderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource)) {
+        qWarning() << "Fragment shader compilation failed:" << shaderProgram->log();
+        return;
+    }
     if (!shaderProgram->link()) {
-        qDebug() << "Shader program linking failed:" << shaderProgram->log();
+        qWarning() << "Shader program linking failed:" << shaderProgram->log();
         return;
     }
 
-    // 设置顶点数据
-    float vertices[] = {
-         0.5f, -0.5f, 0.0f,  // 右下
-        -0.5f, -0.5f, 0.0f,  // 左下
-         0.0f,  0.5f, 0.0f   // 顶部
+    const float vertices[] = {
+        // positions          // colors           // texture coords
+         0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,
+         0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
+        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,
+        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f
+    };
+    const unsigned int indices[] = {
+        0, 1, 3,
+        1, 2, 3
     };
 
-    // 创建 VAO 和 VBO
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
 
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);  // 解绑 VAO
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void *>(0));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void *>(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void *>(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    glBindVertexArray(0);
+
+    const auto loadTexture = [this](unsigned int *textureId, const QString &resourcePath) {
+        glGenTextures(1, textureId);
+        glBindTexture(GL_TEXTURE_2D, *textureId);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        QImage textureImage(resourcePath);
+        if (textureImage.isNull()) {
+            qWarning() << "Failed to load texture resource:" << resourcePath;
+            textureImage = QImage(1, 1, QImage::Format_RGBA8888);
+            textureImage.fill(Qt::magenta);
+        }
+
+        const QImage glImage = textureImage.mirrored(false, true).convertToFormat(QImage::Format_RGBA8888);
+        glTexImage2D(GL_TEXTURE_2D,
+                     0,
+                     GL_RGBA,
+                     glImage.width(),
+                     glImage.height(),
+                     0,
+                     GL_RGBA,
+                     GL_UNSIGNED_BYTE,
+                     glImage.constBits());
+        glGenerateMipmap(GL_TEXTURE_2D);
+    };
+
+    loadTexture(&texture1, QStringLiteral(":/resource/chicken.PNG"));
+    loadTexture(&texture2, QStringLiteral(":/resource/cat.PNG"));
+
+    shaderProgram->bind();
+    shaderProgram->setUniformValue("texture1", 0);
+    shaderProgram->setUniformValue("texture2", 1);
+    shaderProgram->release();
 }
 
 void GLWidget::resizeGL(int w, int h)
@@ -88,34 +160,23 @@ void GLWidget::resizeGL(int w, int h)
 
 void GLWidget::paintGL()
 {
-    // 清屏
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // 激活着色器程序
+    if (!shaderProgram || !shaderProgram->isLinked()) {
+        return;
+    }
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture1);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, texture2);
+
     shaderProgram->bind();
-
-    // 获取 uniform 位置并设置颜色
-    int vertexColorLocation = shaderProgram->uniformLocation("ourColor");
-    shaderProgram->setUniformValue(vertexColorLocation, 0.0f, greenValue, 0.0f, 1.0f);
-
-    // 绑定 VAO 并绘制三角形
     glBindVertexArray(VAO);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
     glBindVertexArray(0);
-
     shaderProgram->release();
-}
-
-void GLWidget::updateColor()
-{
-    // 使用正弦波动态改变绿色分量（产生呼吸灯效果）
-    static double startTime = QDateTime::currentMSecsSinceEpoch() / 1000.0;
-    double currentTime = QDateTime::currentMSecsSinceEpoch() / 1000.0;
-    greenValue = static_cast<float>(sin(currentTime) / 2.0 + 0.5);
-
-    // 触发重绘
-    update();  // 调用 update() 会触发 paintGL()
 }
 
 void GLWidget::keyPressEvent(QKeyEvent *event)

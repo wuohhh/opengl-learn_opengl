@@ -8,3 +8,6 @@ SOURCES += \
 
 HEADERS += \
     glwidget.h
+
+RESOURCES += \
+    resource.qrc

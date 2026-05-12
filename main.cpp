@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QSurfaceFormat>
 #include "glwidget.h"
 
 int main(int argc, char *argv[])
