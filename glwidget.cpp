@@ -85,10 +85,10 @@ void GLWidget::initializeGL()
 
     const float vertices[] = {
         // positions          // colors           // texture coords
-         0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,
-         0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
+         0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   2.0f, 2.0f,
+         0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   2.0f, 0.0f,
         -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,
-        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f
+        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 2.0f
     };
     const unsigned int indices[] = {
         0, 1, 3,
@@ -146,6 +146,10 @@ void GLWidget::initializeGL()
 
     loadTexture(&texture1, QStringLiteral(":/resource/chicken.PNG"));
     loadTexture(&texture2, QStringLiteral(":/resource/cat.PNG"));
+
+    // 将第二个纹理的环绕方式设为 GL_MIRRORED_REPEAT（texture2 当前仍处于绑定状态）
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
 
     shaderProgram->bind();
     shaderProgram->setUniformValue("texture1", 0);
