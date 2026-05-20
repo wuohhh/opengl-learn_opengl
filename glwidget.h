@@ -23,7 +23,6 @@ private:
     QOpenGLShaderProgram *shaderProgram;
     unsigned int VBO;
     unsigned int VAO;
-    unsigned int EBO;
     unsigned int texture1;
     unsigned int texture2;
 };
