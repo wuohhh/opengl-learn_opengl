@@ -4,5 +4,7 @@
         <file>resource/cat.PNG</file>
         <file>resource/container.jpg</file>
         <file>resource/awesomeface.png</file>
+        <file>shaders/coordinate_systems.vs</file>
+        <file>shaders/coordinate_systems.fs</file>
     </qresource>
 </RCC>

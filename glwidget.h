@@ -1,9 +1,11 @@
 #ifndef GLWIDGET_H
 #define GLWIDGET_H
 
+#include <QElapsedTimer>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
+#include <QTimer>
 
 class GLWidget : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core
 {
@@ -18,6 +20,7 @@ protected:
     void resizeGL(int w, int h) override;
     void paintGL() override;
     void keyPressEvent(QKeyEvent *event) override;
+    void checkGlError(const char *location);
 
 private:
     QOpenGLShaderProgram *shaderProgram;
@@ -25,6 +28,8 @@ private:
     unsigned int VAO;
     unsigned int texture1;
     unsigned int texture2;
+    QTimer *timer;
+    QElapsedTimer elapsedTimer;
 };
 
 #endif // GLWIDGET_H

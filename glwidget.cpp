@@ -9,41 +9,23 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-static const char *vertexShaderSource =
-    "#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec2 aTexCoord;\n"
-    "out vec2 TexCoord;\n"
-    "uniform mat4 model;\n"
-    "uniform mat4 view;\n"
-    "uniform mat4 projection;\n"
-    "void main()\n"
-    "{\n"
-    "    gl_Position = projection * view * model * vec4(aPos, 1.0);\n"
-    "    TexCoord = aTexCoord;\n"
-    "}\n";
-
-static const char *fragmentShaderSource =
-    "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "in vec2 TexCoord;\n"
-    "uniform sampler2D texture1;\n"
-    "uniform sampler2D texture2;\n"
-    "void main()\n"
-    "{\n"
-    "    FragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);\n"
-    "}\n";
-
 GLWidget::GLWidget(QWidget *parent)
     : QOpenGLWidget(parent),
       shaderProgram(nullptr),
       VBO(0),
       VAO(0),
       texture1(0),
-      texture2(0)
+      texture2(0),
+      timer(new QTimer(this))
 {
     setWindowTitle("Qt OpenGL Coordinate Systems Multiple");
     resize(800, 600);
+
+    connect(timer, &QTimer::timeout, this, [this]() {
+        update();
+    });
+    timer->start(16);
+    elapsedTimer.start();
 }
 
 GLWidget::~GLWidget()
@@ -67,14 +49,26 @@ GLWidget::~GLWidget()
 
 void GLWidget::initializeGL()
 {
-    initializeOpenGLFunctions();
+    if (!initializeOpenGLFunctions()) {
+        qWarning() << "ERROR: Failed to initialize OpenGL 3.3 Core functions.";
+        qWarning() << "  The context likely does not support OpenGL 3.3 Core Profile.";
+        return;
+    }
+
+    // 输出 OpenGL 上下文诊断信息
+    const GLubyte *vendor   = glGetString(GL_VENDOR);
+    const GLubyte *renderer = glGetString(GL_RENDERER);
+    const GLubyte *version  = glGetString(GL_VERSION);
+    qDebug() << "OpenGL Vendor:  " << (vendor   ? (const char *)vendor   : "N/A");
+    qDebug() << "OpenGL Renderer:" << (renderer ? (const char *)renderer : "N/A");
+    qDebug() << "OpenGL Version: " << (version  ? (const char *)version  : "N/A");
 
     shaderProgram = new QOpenGLShaderProgram(this);
-    if (!shaderProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
+    if (!shaderProgram->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/coordinate_systems.vs")) {
         qWarning() << "Vertex shader compilation failed:" << shaderProgram->log();
         return;
     }
-    if (!shaderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource)) {
+    if (!shaderProgram->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/coordinate_systems.fs")) {
         qWarning() << "Fragment shader compilation failed:" << shaderProgram->log();
         return;
     }
@@ -175,6 +169,12 @@ void GLWidget::initializeGL()
     loadTexture(&texture1, QStringLiteral(":/resource/container.jpg"));
     loadTexture(&texture2, QStringLiteral(":/resource/awesomeface.png"));
 
+    // 刷新 OpenGL 错误状态
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        qWarning() << "OpenGL error during initialization:" << err;
+    }
+
     shaderProgram->bind();
     shaderProgram->setUniformValue("texture1", 0);
     shaderProgram->setUniformValue("texture2", 1);
@@ -184,6 +184,14 @@ void GLWidget::initializeGL()
 void GLWidget::resizeGL(int w, int h)
 {
     glViewport(0, 0, w, h);
+}
+
+void GLWidget::checkGlError(const char *location)
+{
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        qWarning() << "[OpenGL Error @" << location << "]" << err;
+    }
 }
 
 void GLWidget::paintGL()
@@ -201,14 +209,25 @@ void GLWidget::paintGL()
     glBindTexture(GL_TEXTURE_2D, texture2);
 
     shaderProgram->bind();
+    checkGlError("bind");
 
-    glm::mat4 view          = glm::mat4(1.0f);
-    glm::mat4 projection    = glm::mat4(1.0f);
-    projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
-    view       = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+    // 直接使用 glUniformMatrix4fv 传递 GLM 矩阵（避免 QMatrix4x4 转换）
+    int locProj = shaderProgram->uniformLocation("projection");
+    int locView = shaderProgram->uniformLocation("view");
+    int locModel = shaderProgram->uniformLocation("model");
+    qDebug() << "Uniform locations: proj=" << locProj << " view=" << locView << " model=" << locModel;
 
-    shaderProgram->setUniformValue("view",       QMatrix4x4(glm::value_ptr(view)));
-    shaderProgram->setUniformValue("projection", QMatrix4x4(glm::value_ptr(projection)));
+    {
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
+        glUniformMatrix4fv(locProj, 1, GL_FALSE, glm::value_ptr(projection));
+        checkGlError("projection");
+    }
+
+    {
+        glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
+        glUniformMatrix4fv(locView, 1, GL_FALSE, glm::value_ptr(view));
+        checkGlError("view");
+    }
 
     glm::vec3 cubePositions[] = {
         glm::vec3( 0.0f,  0.0f,  0.0f),
@@ -224,15 +243,20 @@ void GLWidget::paintGL()
     };
 
     glBindVertexArray(VAO);
+    checkGlError("bind VAO");
+
+    float time = elapsedTimer.elapsed() / 1000.0f;
     for (unsigned int i = 0; i < 10; i++)
     {
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, cubePositions[i]);
-        float angle = 20.0f * i;
+        float angle = 20.0f * i + time * 50.0f;
         model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-        shaderProgram->setUniformValue("model", QMatrix4x4(glm::value_ptr(model)));
+        glUniformMatrix4fv(locModel, 1, GL_FALSE, glm::value_ptr(model));
+        checkGlError("model");
 
         glDrawArrays(GL_TRIANGLES, 0, 36);
+        checkGlError("draw");
     }
     glBindVertexArray(0);
 

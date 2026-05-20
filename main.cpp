@@ -4,16 +4,17 @@
 
 int main(int argc, char *argv[])
 {
-    QApplication app(argc, argv);
-
-    // 可选：设置 OpenGL 版本和核心模式（与原始 GLFW 配置一致）
+    // 设置 OpenGL 版本和核心模式（必须在 QApplication 构造之前调用）
     QSurfaceFormat format;
     format.setVersion(3, 3);
     format.setProfile(QSurfaceFormat::CoreProfile);
-#ifdef __APPLE__
     format.setOption(QSurfaceFormat::DeprecatedFunctions, false);
-#endif
     QSurfaceFormat::setDefaultFormat(format);
+
+    // 强制使用桌面 OpenGL（而非 ANGLE），确保 3.3 Core 上下文正确创建
+    QApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+
+    QApplication app(argc, argv);
 
     GLWidget widget;
     widget.show();
