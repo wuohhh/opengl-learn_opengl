@@ -9,7 +9,8 @@ SOURCES += \
     main.cpp
 
 HEADERS += \
-    glwidget.h
+    glwidget.h \
+    camera.h
 
 RESOURCES += \
     resource.qrc

@@ -3,7 +3,8 @@
 #include <QDebug>
 #include <QImage>
 #include <QKeyEvent>
-#include <QMatrix4x4>
+#include <QMouseEvent>
+#include <QWheelEvent>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -16,10 +17,18 @@ GLWidget::GLWidget(QWidget *parent)
       VAO(0),
       texture1(0),
       texture2(0),
-      timer(new QTimer(this))
+      timer(new QTimer(this)),
+      camera(glm::vec3(0.0f, 0.0f, 3.0f)),
+      deltaTime(0.0f),
+      lastFrame(0.0f),
+      firstMouse(true),
+      lastX(400.0f),
+      lastY(300.0f),
+      mousePressed(false)
 {
-    setWindowTitle("Qt OpenGL Coordinate Systems Multiple");
+    setWindowTitle("Qt OpenGL Camera Class");
     resize(800, 600);
+    setMouseTracking(false);
 
     connect(timer, &QTimer::timeout, this, [this]() {
         update();
@@ -55,7 +64,6 @@ void GLWidget::initializeGL()
         return;
     }
 
-    // 输出 OpenGL 上下文诊断信息
     const GLubyte *vendor   = glGetString(GL_VENDOR);
     const GLubyte *renderer = glGetString(GL_RENDERER);
     const GLubyte *version  = glGetString(GL_VERSION);
@@ -169,7 +177,6 @@ void GLWidget::initializeGL()
     loadTexture(&texture1, QStringLiteral(":/resource/container.jpg"));
     loadTexture(&texture2, QStringLiteral(":/resource/awesomeface.png"));
 
-    // 刷新 OpenGL 错误状态
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
         qWarning() << "OpenGL error during initialization:" << err;
@@ -196,6 +203,19 @@ void GLWidget::checkGlError(const char *location)
 
 void GLWidget::paintGL()
 {
+    float currentFrame = elapsedTimer.elapsed() / 1000.0f;
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+
+    if (pressedKeys.contains(Qt::Key_W))
+        camera.ProcessKeyboard(FORWARD, deltaTime);
+    if (pressedKeys.contains(Qt::Key_S))
+        camera.ProcessKeyboard(BACKWARD, deltaTime);
+    if (pressedKeys.contains(Qt::Key_A))
+        camera.ProcessKeyboard(LEFT, deltaTime);
+    if (pressedKeys.contains(Qt::Key_D))
+        camera.ProcessKeyboard(RIGHT, deltaTime);
+
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -211,20 +231,19 @@ void GLWidget::paintGL()
     shaderProgram->bind();
     checkGlError("bind");
 
-    // 直接使用 glUniformMatrix4fv 传递 GLM 矩阵（避免 QMatrix4x4 转换）
     int locProj = shaderProgram->uniformLocation("projection");
     int locView = shaderProgram->uniformLocation("view");
     int locModel = shaderProgram->uniformLocation("model");
-    qDebug() << "Uniform locations: proj=" << locProj << " view=" << locView << " model=" << locModel;
 
     {
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
+        float aspect = static_cast<float>(width()) / static_cast<float>(height());
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspect, 0.1f, 100.0f);
         glUniformMatrix4fv(locProj, 1, GL_FALSE, glm::value_ptr(projection));
         checkGlError("projection");
     }
 
     {
-        glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
+        glm::mat4 view = camera.GetViewMatrix();
         glUniformMatrix4fv(locView, 1, GL_FALSE, glm::value_ptr(view));
         checkGlError("view");
     }
@@ -268,6 +287,59 @@ void GLWidget::keyPressEvent(QKeyEvent *event)
     if (event->key() == Qt::Key_Escape) {
         close();
     } else {
+        pressedKeys.insert(event->key());
         QOpenGLWidget::keyPressEvent(event);
     }
+}
+
+void GLWidget::keyReleaseEvent(QKeyEvent *event)
+{
+    pressedKeys.remove(event->key());
+    QOpenGLWidget::keyReleaseEvent(event);
+}
+
+void GLWidget::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        mousePressed = true;
+        firstMouse = true;
+    }
+    QOpenGLWidget::mousePressEvent(event);
+}
+
+void GLWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        mousePressed = false;
+    }
+    QOpenGLWidget::mouseReleaseEvent(event);
+}
+
+void GLWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!mousePressed)
+        return;
+
+    float xpos = static_cast<float>(event->pos().x());
+    float ypos = static_cast<float>(event->pos().y());
+
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+    lastX = xpos;
+    lastY = ypos;
+
+    camera.ProcessMouseMovement(xoffset, yoffset);
+    QOpenGLWidget::mouseMoveEvent(event);
+}
+
+void GLWidget::wheelEvent(QWheelEvent *event)
+{
+    camera.ProcessMouseScroll(static_cast<float>(event->angleDelta().y()) / 120.0f);
+    QOpenGLWidget::wheelEvent(event);
 }
