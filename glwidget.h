@@ -31,11 +31,11 @@ protected:
     void checkGlError(const char *location);
 
 private:
-    QOpenGLShaderProgram *shaderProgram;
+    QOpenGLShaderProgram *lightingShader;
+    QOpenGLShaderProgram *lightCubeShader;
     unsigned int VBO;
-    unsigned int VAO;
-    unsigned int texture1;
-    unsigned int texture2;
+    unsigned int cubeVAO;
+    unsigned int lightCubeVAO;
     QTimer *timer;
     QElapsedTimer elapsedTimer;
 
@@ -47,6 +47,8 @@ private:
     float lastY;
     bool mousePressed;
     QSet<int> pressedKeys;
+
+    glm::vec3 lightPos;
 };
 
 #endif // GLWIDGET_H

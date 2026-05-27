@@ -6,5 +6,9 @@
         <file>resource/awesomeface.png</file>
         <file>shaders/coordinate_systems.vs</file>
         <file>shaders/coordinate_systems.fs</file>
+        <file>shaders/colors.vs</file>
+        <file>shaders/colors.fs</file>
+        <file>shaders/light_cube.vs</file>
+        <file>shaders/light_cube.fs</file>
     </qresource>
 </RCC>
