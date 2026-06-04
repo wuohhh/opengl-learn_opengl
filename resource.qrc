@@ -4,11 +4,15 @@
         <file>resource/cat.PNG</file>
         <file>resource/container.jpg</file>
         <file>resource/awesomeface.png</file>
+        <file>resource/container2.png</file>
+        <file>resource/container2_specular.png</file>
         <file>shaders/coordinate_systems.vs</file>
         <file>shaders/coordinate_systems.fs</file>
         <file>shaders/colors.vs</file>
         <file>shaders/colors.fs</file>
         <file>shaders/light_cube.vs</file>
         <file>shaders/light_cube.fs</file>
+        <file>shaders/lighting_maps.vs</file>
+        <file>shaders/lighting_maps.fs</file>
     </qresource>
 </RCC>

@@ -36,6 +36,8 @@ private:
     unsigned int VBO;
     unsigned int cubeVAO;
     unsigned int lightCubeVAO;
+    unsigned int diffuseMap;
+    unsigned int specularMap;
     QTimer *timer;
     QElapsedTimer elapsedTimer;
 
@@ -49,6 +51,8 @@ private:
     QSet<int> pressedKeys;
 
     glm::vec3 lightPos;
+
+    unsigned int loadTexture(QString path);
 };
 
 #endif // GLWIDGET_H

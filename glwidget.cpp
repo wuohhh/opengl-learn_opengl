@@ -1,6 +1,7 @@
 #include "glwidget.h"
 
 #include <QDebug>
+#include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -26,7 +27,7 @@ GLWidget::GLWidget(QWidget *parent)
       mousePressed(false),
       lightPos(1.2f, 1.0f, 2.0f)
 {
-    setWindowTitle("Qt OpenGL Colors");
+    setWindowTitle("Qt OpenGL Lighting Maps (Specular Map)");
     resize(800, 600);
     setMouseTracking(false);
 
@@ -49,6 +50,12 @@ GLWidget::~GLWidget()
     if (lightCubeVAO) {
         glDeleteVertexArrays(1, &lightCubeVAO);
     }
+    if (diffuseMap) {
+        glDeleteTextures(1, &diffuseMap);
+    }
+    if (specularMap) {
+        glDeleteTextures(1, &specularMap);
+    }
     delete lightingShader;
     delete lightCubeShader;
     doneCurrent();
@@ -70,12 +77,12 @@ void GLWidget::initializeGL()
     qDebug() << "OpenGL Version: " << (version  ? (const char *)version  : "N/A");
 
     lightingShader = new QOpenGLShaderProgram(this);
-    if (!lightingShader->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/colors.vs")) {
-        qWarning() << "colors.vs compilation failed:" << lightingShader->log();
+    if (!lightingShader->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/lighting_maps.vs")) {
+        qWarning() << "lighting_maps.vs compilation failed:" << lightingShader->log();
         return;
     }
-    if (!lightingShader->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/colors.fs")) {
-        qWarning() << "colors.fs compilation failed:" << lightingShader->log();
+    if (!lightingShader->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/lighting_maps.fs")) {
+        qWarning() << "lighting_maps.fs compilation failed:" << lightingShader->log();
         return;
     }
     if (!lightingShader->link()) {
@@ -98,47 +105,48 @@ void GLWidget::initializeGL()
     }
 
     float vertices[] = {
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        // positions          // normals           // texture coords
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f,  1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f,  1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f,  0.0f,
 
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f,  1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f,  1.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  0.0f,
 
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  1.0f,  1.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  1.0f,  0.0f,
 
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  1.0f,  1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f,  1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f,  1.0f,
+         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  0.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f,  0.0f,
 
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  0.0f,  1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  1.0f,  1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  1.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  1.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  0.0f,  1.0f,
 
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f,  1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  1.0f,  1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f,  1.0f
     };
 
     glGenVertexArrays(1, &cubeVAO);
@@ -149,16 +157,28 @@ void GLWidget::initializeGL()
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     glBindVertexArray(cubeVAO);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void *>(0));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void *>(0));
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void *>(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void *>(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void *>(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
 
     glBindVertexArray(lightCubeVAO);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void *>(0));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void *>(0));
     glEnableVertexAttribArray(0);
 
     glBindVertexArray(0);
+
+    // load textures
+    diffuseMap = loadTexture(":/resource/container2.png");
+    specularMap = loadTexture(":/resource/container2_specular.png");
+
+    // shader configuration
+    lightingShader->bind();
+    lightingShader->setUniformValue("material.diffuse", 0);
+    lightingShader->setUniformValue("material.specular", 1);
+    lightingShader->release();
 
     glEnable(GL_DEPTH_TEST);
 
@@ -209,16 +229,29 @@ void GLWidget::paintGL()
     glm::mat4 view = camera.GetViewMatrix();
 
     lightingShader->bind();
-    lightingShader->setUniformValue("objectColor", 1.0f, 0.5f, 0.31f);
-    lightingShader->setUniformValue("lightColor", 1.0f, 1.0f, 1.0f);
-    lightingShader->setUniformValue("lightPos", lightPos.x, lightPos.y, lightPos.z);
+    lightingShader->setUniformValue("light.position", lightPos.x, lightPos.y, lightPos.z);
     lightingShader->setUniformValue("viewPos", camera.Position.x, camera.Position.y, camera.Position.z);
+
+    // light properties
+    lightingShader->setUniformValue("light.ambient", 0.2f, 0.2f, 0.2f);
+    lightingShader->setUniformValue("light.diffuse", 0.5f, 0.5f, 0.5f);
+    lightingShader->setUniformValue("light.specular", 1.0f, 1.0f, 1.0f);
+
+    // material properties
+    lightingShader->setUniformValue("material.shininess", 64.0f);
 
     int locProj = lightingShader->uniformLocation("projection");
     int locView = lightingShader->uniformLocation("view");
     int locModel = lightingShader->uniformLocation("model");
     glUniformMatrix4fv(locProj, 1, GL_FALSE, glm::value_ptr(projection));
     glUniformMatrix4fv(locView, 1, GL_FALSE, glm::value_ptr(view));
+
+    // bind diffuse map
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, diffuseMap);
+    // bind specular map
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, specularMap);
 
     glBindVertexArray(cubeVAO);
     glm::mat4 model = glm::mat4(1.0f);
@@ -302,4 +335,28 @@ void GLWidget::wheelEvent(QWheelEvent *event)
 {
     camera.ProcessMouseScroll(static_cast<float>(event->angleDelta().y()) / 120.0f);
     QOpenGLWidget::wheelEvent(event);
+}
+
+unsigned int GLWidget::loadTexture(QString path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    QImage img(path);
+    if (img.isNull()) {
+        qWarning() << "Texture failed to load at path:" << path;
+        return 0;
+    }
+    QImage tex = img.mirrored().convertToFormat(QImage::Format_RGBA8888);
+
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.width(), tex.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, tex.bits());
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    return textureID;
 }
