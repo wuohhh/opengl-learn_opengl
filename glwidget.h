@@ -32,6 +32,7 @@ protected:
 
 private:
     QOpenGLShaderProgram *lightingShader;
+    QOpenGLShaderProgram *multipleLightsShader;
     QOpenGLShaderProgram *lightCubeShader;
     unsigned int VBO;
     unsigned int cubeVAO;
@@ -50,7 +51,8 @@ private:
     bool mousePressed;
     QSet<int> pressedKeys;
 
-    glm::vec3 lightPos;
+    glm::vec3 cubePositions[10];
+    glm::vec3 pointLightPositions[4];
 
     unsigned int loadTexture(QString path);
 };

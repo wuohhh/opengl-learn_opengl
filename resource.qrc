@@ -14,5 +14,6 @@
         <file>shaders/light_cube.fs</file>
         <file>shaders/lighting_maps.vs</file>
         <file>shaders/lighting_maps.fs</file>
+        <file>shaders/multiple_lights.fs</file>
     </qresource>
 </RCC>

@@ -13,6 +13,7 @@
 GLWidget::GLWidget(QWidget *parent)
     : QOpenGLWidget(parent),
       lightingShader(nullptr),
+      multipleLightsShader(nullptr),
       lightCubeShader(nullptr),
       VBO(0),
       cubeVAO(0),
@@ -24,12 +25,27 @@ GLWidget::GLWidget(QWidget *parent)
       firstMouse(true),
       lastX(400.0f),
       lastY(300.0f),
-      mousePressed(false),
-      lightPos(1.2f, 1.0f, 2.0f)
+      mousePressed(false)
 {
-    setWindowTitle("Qt OpenGL Lighting Maps (Specular Map)");
+    setWindowTitle("Qt OpenGL Multiple Lights");
     resize(800, 600);
     setMouseTracking(false);
+
+    cubePositions[0] = glm::vec3(0.0f, 0.0f, 0.0f);
+    cubePositions[1] = glm::vec3(2.0f, 5.0f, -15.0f);
+    cubePositions[2] = glm::vec3(-1.5f, -2.2f, -2.5f);
+    cubePositions[3] = glm::vec3(-3.8f, -2.0f, -12.3f);
+    cubePositions[4] = glm::vec3(2.4f, -0.4f, -3.5f);
+    cubePositions[5] = glm::vec3(-1.7f, 3.0f, -7.5f);
+    cubePositions[6] = glm::vec3(1.3f, -2.0f, -2.5f);
+    cubePositions[7] = glm::vec3(1.5f, 2.0f, -2.5f);
+    cubePositions[8] = glm::vec3(1.5f, 0.2f, -1.5f);
+    cubePositions[9] = glm::vec3(-1.3f, 1.0f, -1.5f);
+
+    pointLightPositions[0] = glm::vec3(0.7f, 0.2f, 2.0f);
+    pointLightPositions[1] = glm::vec3(2.3f, -3.3f, -4.0f);
+    pointLightPositions[2] = glm::vec3(-4.0f, 2.0f, -12.0f);
+    pointLightPositions[3] = glm::vec3(0.0f, 0.0f, -3.0f);
 
     connect(timer, &QTimer::timeout, this, [this]() {
         update();
@@ -57,6 +73,7 @@ GLWidget::~GLWidget()
         glDeleteTextures(1, &specularMap);
     }
     delete lightingShader;
+    delete multipleLightsShader;
     delete lightCubeShader;
     doneCurrent();
 }
@@ -87,6 +104,20 @@ void GLWidget::initializeGL()
     }
     if (!lightingShader->link()) {
         qWarning() << "lightingShader linking failed:" << lightingShader->log();
+        return;
+    }
+
+    multipleLightsShader = new QOpenGLShaderProgram(this);
+    if (!multipleLightsShader->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/lighting_maps.vs")) {
+        qWarning() << "lighting_maps.vs compilation failed:" << multipleLightsShader->log();
+        return;
+    }
+    if (!multipleLightsShader->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/multiple_lights.fs")) {
+        qWarning() << "multiple_lights.fs compilation failed:" << multipleLightsShader->log();
+        return;
+    }
+    if (!multipleLightsShader->link()) {
+        qWarning() << "multipleLightsShader linking failed:" << multipleLightsShader->log();
         return;
     }
 
@@ -180,6 +211,11 @@ void GLWidget::initializeGL()
     lightingShader->setUniformValue("material.specular", 1);
     lightingShader->release();
 
+    multipleLightsShader->bind();
+    multipleLightsShader->setUniformValue("material.diffuse", 0);
+    multipleLightsShader->setUniformValue("material.specular", 1);
+    multipleLightsShader->release();
+
     glEnable(GL_DEPTH_TEST);
 
     GLenum err = glGetError();
@@ -219,7 +255,7 @@ void GLWidget::paintGL()
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (!lightingShader || !lightingShader->isLinked())
+    if (!multipleLightsShader || !multipleLightsShader->isLinked())
         return;
     if (!lightCubeShader || !lightCubeShader->isLinked())
         return;
@@ -228,21 +264,67 @@ void GLWidget::paintGL()
     glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), aspect, 0.1f, 100.0f);
     glm::mat4 view = camera.GetViewMatrix();
 
-    lightingShader->bind();
-    lightingShader->setUniformValue("light.position", lightPos.x, lightPos.y, lightPos.z);
-    lightingShader->setUniformValue("viewPos", camera.Position.x, camera.Position.y, camera.Position.z);
+    // ===========================
+    // Multiple Lights Shader Pass
+    // ===========================
+    multipleLightsShader->bind();
+    multipleLightsShader->setUniformValue("viewPos", camera.Position.x, camera.Position.y, camera.Position.z);
+    multipleLightsShader->setUniformValue("material.shininess", 32.0f);
 
-    // light properties
-    lightingShader->setUniformValue("light.ambient", 0.2f, 0.2f, 0.2f);
-    lightingShader->setUniformValue("light.diffuse", 0.5f, 0.5f, 0.5f);
-    lightingShader->setUniformValue("light.specular", 1.0f, 1.0f, 1.0f);
+    // directional light
+    multipleLightsShader->setUniformValue("dirLight.direction", -0.2f, -1.0f, -0.3f);
+    multipleLightsShader->setUniformValue("dirLight.ambient", 0.05f, 0.05f, 0.05f);
+    multipleLightsShader->setUniformValue("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
+    multipleLightsShader->setUniformValue("dirLight.specular", 0.5f, 0.5f, 0.5f);
 
-    // material properties
-    lightingShader->setUniformValue("material.shininess", 64.0f);
+    // point light 1
+    multipleLightsShader->setUniformValue("pointLights[0].position", pointLightPositions[0].x, pointLightPositions[0].y, pointLightPositions[0].z);
+    multipleLightsShader->setUniformValue("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
+    multipleLightsShader->setUniformValue("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
+    multipleLightsShader->setUniformValue("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[0].constant", 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[0].linear", 0.09f);
+    multipleLightsShader->setUniformValue("pointLights[0].quadratic", 0.032f);
+    // point light 2
+    multipleLightsShader->setUniformValue("pointLights[1].position", pointLightPositions[1].x, pointLightPositions[1].y, pointLightPositions[1].z);
+    multipleLightsShader->setUniformValue("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
+    multipleLightsShader->setUniformValue("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
+    multipleLightsShader->setUniformValue("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[1].constant", 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[1].linear", 0.09f);
+    multipleLightsShader->setUniformValue("pointLights[1].quadratic", 0.032f);
+    // point light 3
+    multipleLightsShader->setUniformValue("pointLights[2].position", pointLightPositions[2].x, pointLightPositions[2].y, pointLightPositions[2].z);
+    multipleLightsShader->setUniformValue("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
+    multipleLightsShader->setUniformValue("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
+    multipleLightsShader->setUniformValue("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[2].constant", 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[2].linear", 0.09f);
+    multipleLightsShader->setUniformValue("pointLights[2].quadratic", 0.032f);
+    // point light 4
+    multipleLightsShader->setUniformValue("pointLights[3].position", pointLightPositions[3].x, pointLightPositions[3].y, pointLightPositions[3].z);
+    multipleLightsShader->setUniformValue("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
+    multipleLightsShader->setUniformValue("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
+    multipleLightsShader->setUniformValue("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[3].constant", 1.0f);
+    multipleLightsShader->setUniformValue("pointLights[3].linear", 0.09f);
+    multipleLightsShader->setUniformValue("pointLights[3].quadratic", 0.032f);
 
-    int locProj = lightingShader->uniformLocation("projection");
-    int locView = lightingShader->uniformLocation("view");
-    int locModel = lightingShader->uniformLocation("model");
+    // spot light
+    multipleLightsShader->setUniformValue("spotLight.position", camera.Position.x, camera.Position.y, camera.Position.z);
+    multipleLightsShader->setUniformValue("spotLight.direction", camera.Front.x, camera.Front.y, camera.Front.z);
+    multipleLightsShader->setUniformValue("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+    multipleLightsShader->setUniformValue("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+    multipleLightsShader->setUniformValue("spotLight.specular", 1.0f, 1.0f, 1.0f);
+    multipleLightsShader->setUniformValue("spotLight.constant", 1.0f);
+    multipleLightsShader->setUniformValue("spotLight.linear", 0.09f);
+    multipleLightsShader->setUniformValue("spotLight.quadratic", 0.032f);
+    multipleLightsShader->setUniformValue("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+    multipleLightsShader->setUniformValue("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+
+    int locProj = multipleLightsShader->uniformLocation("projection");
+    int locView = multipleLightsShader->uniformLocation("view");
+    int locModel = multipleLightsShader->uniformLocation("model");
     glUniformMatrix4fv(locProj, 1, GL_FALSE, glm::value_ptr(projection));
     glUniformMatrix4fv(locView, 1, GL_FALSE, glm::value_ptr(view));
 
@@ -253,11 +335,21 @@ void GLWidget::paintGL()
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, specularMap);
 
+    // render 10 containers
     glBindVertexArray(cubeVAO);
-    glm::mat4 model = glm::mat4(1.0f);
-    glUniformMatrix4fv(locModel, 1, GL_FALSE, glm::value_ptr(model));
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    for (unsigned int i = 0; i < 10; i++)
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, cubePositions[i]);
+        float angle = 20.0f * i;
+        model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+        glUniformMatrix4fv(locModel, 1, GL_FALSE, glm::value_ptr(model));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
 
+    // ===========================
+    // Light Cube Shader Pass
+    // ===========================
     lightCubeShader->bind();
     locProj = lightCubeShader->uniformLocation("projection");
     locView = lightCubeShader->uniformLocation("view");
@@ -265,12 +357,16 @@ void GLWidget::paintGL()
     glUniformMatrix4fv(locProj, 1, GL_FALSE, glm::value_ptr(projection));
     glUniformMatrix4fv(locView, 1, GL_FALSE, glm::value_ptr(view));
 
+    // draw 4 point light cubes
     glBindVertexArray(lightCubeVAO);
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, lightPos);
-    model = glm::scale(model, glm::vec3(0.2f));
-    glUniformMatrix4fv(locModel, 1, GL_FALSE, glm::value_ptr(model));
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    for (unsigned int i = 0; i < 4; i++)
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, pointLightPositions[i]);
+        model = glm::scale(model, glm::vec3(0.2f));
+        glUniformMatrix4fv(locModel, 1, GL_FALSE, glm::value_ptr(model));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
 
     glBindVertexArray(0);
 }
